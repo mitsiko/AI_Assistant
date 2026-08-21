@@ -1,0 +1,22 @@
+IMPLEMENT THESE GUI CHANGES, GUIDE ME STEP-BY-STEP
+
+
+CARD TITLE (SUCH AS ASSISTANT CARD, LATEST ACTIVITIES, etc.):
+- Make the card titles be anchored on the top left corner of the cards, in a flush way, no spaces.
+- Prevent the titles' background color to span the whole width of their cards, have its background only cover the text itself.
+
+ASSITANT CARD:
+- I want to replace the Nova Icon placeholder to an actual PNG icon. My Nova Icon is in my assets folder named "NOVA-ICON.png. Make my icon to be 175x105 pixels.
+- Make the Assistant's Card border color to be the same as the background color EXCEPT for the right-side of the border, next to LATEST ACTIVITY.
+
+LATEST ACTIVITY:
+- Make its border not have ANY border color/ have the same color as the background color.
+
+AC MODES ICONS:
+- Make the the exsiting icons bigger.
+- Make the 3 icons be align right. 
+- Make the 3 icons be aligned correctly with eaech other and with the Temperature that is in the same row.
+- Once the 3 icons are bigger aligned horizontallly, and are aligned to the right, make the gaps of the 3 icons be equal to the gaps of the actual temperature beside it. Make it to that the 4 of them (the actual temperature, and the 3 icons) look evenly placed in their row.
+
+ENTERTAINMENT CARD:
+- I noticed that the TV, its 'STATUS:' and its STATE(ON/OFF) are not totally all in one row/line and are not evenly spaced. Make it so that the said elements are evenly spaced and are aligned horizontally properly in their row. Do the same to the SPEAKER, its 'VOLUME:' and its STATE (ON/OOF).

@@ -69,7 +69,7 @@ logger = setup_logging()
 BG_COLOR = "#e8e7db"
 BORDER_COLOR = "#2d2a2a"
 ACTIVE_COLOR = "#eb3d1b"
-INACTIVE_COLOR = "#afaf9e"
+INACTIVE_COLOR = "#68684e"
 FONT_FAMILY = "MS Gothic"  # Monospace
 
 # ══════════════════════════════════════════════════════════════════════
@@ -129,7 +129,8 @@ class StatusSwitch(tk.Canvas):
 class BentoCard(tk.Frame):
     """Base bento-style card with border."""
     
-    def __init__(self, parent, title: str, **kwargs):
+    def __init__(self, parent, title: str, title_centered: bool = False, 
+                 title_inverted: bool = False, **kwargs):
         super().__init__(parent, bg=BG_COLOR, **kwargs)
         
         # Card frame with border
@@ -140,23 +141,37 @@ class BentoCard(tk.Frame):
             highlightthickness=1,
             bd=0
         )
-        self.card_frame.pack(fill="both", expand=True, padx=2.5, pady=2.5)
+        self.card_frame.pack(fill="both", expand=True, padx=5, pady=5)
         
-        # Title
+        # Title styling
+        if title_inverted:
+            title_bg = BORDER_COLOR
+            title_fg = BG_COLOR
+        else:
+            title_bg = BG_COLOR
+            title_fg = BORDER_COLOR
+        
+        # Title label
         self.title_label = tk.Label(
             self.card_frame,
             text=title,
             font=(FONT_FAMILY, 12, "bold"),
-            bg=BORDER_COLOR,
-            fg=BG_COLOR,
-            anchor="w"
+            bg=title_bg,
+            fg=title_fg,
+            anchor="center" if title_centered else "nw",
+            justify="center" if title_centered else "left",
+            padx=10,
+            pady=2
         )
-        self.title_label.pack(pady=(10, 5), padx=10, anchor="w")
+        
+        if title_centered:
+            self.title_label.pack(fill="x", pady=(0, 5))
+        else:
+            self.title_label.pack(anchor="nw", pady=(0, 5))
         
         # Content area
         self.content_frame = tk.Frame(self.card_frame, bg=BG_COLOR)
-        self.content_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-
+        self.content_frame.pack(fill="both", expand=True, pady=(0, 10))
 
 # ══════════════════════════════════════════════════════════════════════
 #  MAIN APPLICATION CLASS
@@ -249,30 +264,102 @@ class ApexAssistantApp:
             lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         )
         
-        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas_window = self.canvas.create_window(
+            (0, 0), window=self.scrollable_frame, anchor="nw"
+        )
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        
+        # Center the dashboard in the window
+        def center_dashboard(event=None):
+            canvas_width = self.canvas.winfo_width()
+            frame_width = self.scrollable_frame.winfo_reqwidth()
+            if canvas_width > frame_width:
+                x_position = (canvas_width - frame_width) // 2
+            else:
+                x_position = 0
+            self.canvas.coords(self.canvas_window, x_position, 0)
+        
+        self.canvas.bind("<Configure>", center_dashboard)
         
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
         
         # ── Top Row: Status and Activity ───────────────────────────
         top_row = tk.Frame(self.scrollable_frame, bg=BG_COLOR)
-        top_row.pack(fill="x", padx=10, pady=(10, 5))
-        
-        # Assistant Status Card
-        self.status_card = BentoCard(top_row, "ASSISTANT STATUS")
-        self.status_card.pack(side="left", fill="both", expand=True, padx=(0, 5))
-        
-        # Nova icon (placeholder circle)
-        self.icon_canvas = tk.Canvas(
-            self.status_card.content_frame,
-            width=60, height=60,
-            bg=BG_COLOR, highlightthickness=0
+        top_row.pack(fill="x", padx=10, pady=(10, 0))
+
+
+        self.status_card = BentoCard(
+            top_row,
+            "ASSISTANT STATUS",
+            title_centered=True,
+            title_inverted=True
         )
-        self.icon_canvas.pack(pady=(0, 5))
-        self.icon_canvas.create_oval(5, 5, 55, 55, fill=ACTIVE_COLOR, outline="")
-        self.icon_canvas.create_text(30, 30, text="S", fill="white", 
-                                    font=(FONT_FAMILY, 24, "bold"))
+
+        self.status_card.title_label.configure(
+            bg=BG_COLOR,
+            fg=BORDER_COLOR
+        )
+
+        # Remove BentoCard's outer border
+        self.status_card.card_frame.configure(
+            highlightthickness=0,
+            bd=0,
+            relief="flat"
+        )
+
+        self.status_card.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=(0, 0)
+        )
+
+        # ── Divider ────────────────────────────────────────────────
+        divider = tk.Frame(
+            top_row,
+            bg=BORDER_COLOR,
+            width=1
+        )
+        divider.pack(
+            side="left",
+            fill="y"
+        )
+        
+        # Nova icon (PNG)
+        try:
+            nova_icon_path = os.path.join("assets", "NOVA-ICON.png")
+            if os.path.exists(nova_icon_path):
+                nova_img = Image.open(nova_icon_path)
+                nova_img = nova_img.resize((175, 105), Image.Resampling.LANCZOS)
+                self.nova_icon = ImageTk.PhotoImage(nova_img)
+                self.icon_label = tk.Label(
+                    self.status_card.content_frame,
+                    image=self.nova_icon,
+                    bg=BG_COLOR
+                )
+                self.icon_label.pack(pady=(0, 5))
+            else:
+                # Fallback to placeholder
+                self.icon_canvas = tk.Canvas(
+                    self.status_card.content_frame,
+                    width=175, height=105,
+                    bg=BG_COLOR, highlightthickness=0
+                )
+                self.icon_canvas.pack(pady=(0, 5))
+                self.icon_canvas.create_text(87, 52, text="NOVA", fill=ACTIVE_COLOR, 
+                                            font=(FONT_FAMILY, 24, "bold"))
+        except Exception as e:
+            logger.warning(f"Could not load Nova icon: {e}")
+            # Fallback
+            self.icon_canvas = tk.Canvas(
+                self.status_card.content_frame,
+                width=175, height=105,
+                bg=BG_COLOR, highlightthickness=0
+            )
+            self.icon_canvas.pack(pady=(0, 5))
+            self.icon_canvas.create_text(87, 52, text="NOVA", fill=ACTIVE_COLOR, 
+                                        font=(FONT_FAMILY, 24, "bold"))
         
         self.assistant_name = tk.Label(
             self.status_card.content_frame,
@@ -299,8 +386,29 @@ class ApexAssistantApp:
         self.instruction_label.pack(pady=(0, 5))
         
         # Latest Activity Card
-        self.activity_card = BentoCard(top_row, "LATEST ACTIVITY")
-        self.activity_card.pack(side="left", fill="both", expand=True, padx=(5, 0))
+        self.activity_card = BentoCard(
+            top_row,
+            "LATEST ACTIVITY"
+        )
+
+        self.activity_card.title_label.configure(
+            bg=BORDER_COLOR,
+            fg=BG_COLOR
+        )
+
+        self.activity_card.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=(20, 0)
+        )
+            
+        # Remove border from Latest Activity card
+        self.activity_card.card_frame.configure(
+            highlightthickness=0,
+            highlightbackground=BG_COLOR,
+            highlightcolor=BG_COLOR
+        )
         
         self.you_said_label = tk.Label(
             self.activity_card.content_frame,
@@ -309,7 +417,7 @@ class ApexAssistantApp:
             bg=BG_COLOR, fg=BORDER_COLOR,
             justify="left", wraplength=200
         )
-        self.you_said_label.pack(anchor="w", pady=(0, 5))
+        self.you_said_label.pack(anchor="w", pady=(15, 5))
         
         self.understood_label = tk.Label(
             self.activity_card.content_frame,
@@ -350,77 +458,89 @@ class ApexAssistantApp:
         
         # ── Second Row: Thermostat (Full Width) ────────────────────
         thermostat_row = tk.Frame(self.scrollable_frame, bg=BG_COLOR)
-        thermostat_row.pack(fill="x", padx=10, pady=5)
+        thermostat_row.pack(fill="x", padx=10, pady=(0, 0))
         
         self.thermostat_card = BentoCard(thermostat_row, "THERMOSTAT")
+        self.thermostat_card.title_label.configure(
+            bg=BORDER_COLOR,
+            fg=BG_COLOR
+        )
         self.thermostat_card.pack(fill="both", expand=True)
         
-        # Temperature and mode display
+        # Temperature and mode display - using grid for even spacing
         thermo_content = tk.Frame(self.thermostat_card.content_frame, bg=BG_COLOR)
-        thermo_content.pack(fill="x", pady=10)
+        thermo_content.pack(fill="x", pady=10, padx=20)
         
-        # Temperature
+        # Configure grid columns for even spacing
+        thermo_content.grid_columnconfigure(0, weight=1, uniform="thermo")
+        thermo_content.grid_columnconfigure(1, weight=1, uniform="thermo")
+        thermo_content.grid_columnconfigure(2, weight=1, uniform="thermo")
+        thermo_content.grid_columnconfigure(3, weight=1, uniform="thermo")
+        
+        # Temperature - column 0
         self.temp_display = tk.Label(
             thermo_content,
             text="22°C",
-            font=(FONT_FAMILY, 24, "bold"),
+            font=(FONT_FAMILY, 28, "bold"),
             bg=BG_COLOR, fg=ACTIVE_COLOR
         )
-        self.temp_display.pack(side="left", padx=20)
+        self.temp_display.grid(row=0, column=0, sticky="nsew")
         
-        # Mode icons (placeholder buttons)
-        mode_frame = tk.Frame(thermo_content, bg=BG_COLOR)
-        mode_frame.pack(side="left", padx=20)
+        # COOL mode - column 1
+        cool_frame = tk.Frame(thermo_content, bg=BG_COLOR)
+        cool_frame.grid(row=0, column=1, sticky="nsew")
         
-        # COOL mode
-        cool_frame = tk.Frame(mode_frame, bg=BG_COLOR)
-        cool_frame.pack(side="left", padx=10)
-        # COOL mode icon
         self.cool_icon = tk.Label(
             cool_frame,
             image=self.mode_icons.get("cool_inactive") if self.mode_icons.get("cool_inactive") else None,
             text="" if self.mode_icons.get("cool_inactive") else "❄",
-            font=(FONT_FAMILY, 20),
+            font=(FONT_FAMILY, 36),
             bg=BG_COLOR, fg=INACTIVE_COLOR
         )
-        self.cool_icon.pack()
-        tk.Label(cool_frame, text="Cool", font=(FONT_FAMILY, 9), bg=BG_COLOR, fg=BORDER_COLOR).pack()
+        self.cool_icon.pack(expand=True)
+        tk.Label(cool_frame, text="Cool", font=(FONT_FAMILY, 10), bg=BG_COLOR, fg=BORDER_COLOR).pack()
         
-        # FAN mode
-        fan_frame = tk.Frame(mode_frame, bg=BG_COLOR)
-        fan_frame.pack(side="left", padx=10)
-        # FAN mode icon
+        # FAN mode - column 2
+        fan_frame = tk.Frame(thermo_content, bg=BG_COLOR)
+        fan_frame.grid(row=0, column=2, sticky="nsew")
+        
         self.fan_icon = tk.Label(
             fan_frame,
             image=self.mode_icons.get("fan_inactive") if self.mode_icons.get("fan_inactive") else None,
             text="" if self.mode_icons.get("fan_inactive") else "♨",
-            font=(FONT_FAMILY, 20),
+            font=(FONT_FAMILY, 36),
             bg=BG_COLOR, fg=INACTIVE_COLOR
         )
-        self.fan_icon.pack()
-        tk.Label(fan_frame, text="Fan", font=(FONT_FAMILY, 9), bg=BG_COLOR, fg=BORDER_COLOR).pack()
+        self.fan_icon.pack(expand=True)
+        tk.Label(fan_frame, text="Fan", font=(FONT_FAMILY, 10), bg=BG_COLOR, fg=BORDER_COLOR).pack()
         
-        # DRY mode
-        dry_frame = tk.Frame(mode_frame, bg=BG_COLOR)
-        dry_frame.pack(side="left", padx=10)
-        # DRY mode icon
+        # DRY mode - column 3
+        dry_frame = tk.Frame(thermo_content, bg=BG_COLOR)
+        dry_frame.grid(row=0, column=3, sticky="nsew")
+        
         self.dry_icon = tk.Label(
             dry_frame,
             image=self.mode_icons.get("dry_inactive") if self.mode_icons.get("dry_inactive") else None,
             text="" if self.mode_icons.get("dry_inactive") else "💧",
-            font=(FONT_FAMILY, 20),
+            font=(FONT_FAMILY, 36),
             bg=BG_COLOR, fg=INACTIVE_COLOR
         )
-        self.dry_icon.pack()
-        tk.Label(dry_frame, text="Dry", font=(FONT_FAMILY, 9), bg=BG_COLOR, fg=BORDER_COLOR).pack()
+        self.dry_icon.pack(expand=True)
+        tk.Label(dry_frame, text="Dry", font=(FONT_FAMILY, 10), bg=BG_COLOR, fg=BORDER_COLOR).pack()
         
         # ── Middle Row: Lights, Security ────────────────────────────
         middle_row = tk.Frame(self.scrollable_frame, bg=BG_COLOR)
-        middle_row.pack(fill="x", padx=10, pady=5)
+        middle_row.pack(fill="x", padx=10, pady=(0, 5))
         
         # Lights Card
         self.lights_card = BentoCard(middle_row, "LIGHTS")
+        self.lights_card.title_label.configure(
+            bg=BORDER_COLOR,
+            fg=BG_COLOR
+        )
         self.lights_card.pack(side="left", fill="both", expand=True, padx=(0, 5))
+        # Add inner padding
+        self.lights_card.content_frame.configure(padx=15)
         
         self.light_switches = {}
         light_rooms = [
@@ -452,7 +572,13 @@ class ApexAssistantApp:
         
         # Security Card
         self.security_card = BentoCard(middle_row, "SECURITY")
+        self.security_card.title_label.configure(
+            bg=BORDER_COLOR,
+            fg=BG_COLOR
+        )
         self.security_card.pack(side="left", fill="both", expand=True, padx=(5, 0))
+        # Add inner padding
+        self.security_card.content_frame.configure(padx=15)
         
         self.door_switches = {}
         door_rooms = [
@@ -486,19 +612,37 @@ class ApexAssistantApp:
         bottom_row.pack(fill="x", padx=10, pady=(5, 10))
         
         self.entertainment_card = BentoCard(bottom_row, "ENTERTAINMENT")
+        self.entertainment_card.title_label.configure(
+            bg=BORDER_COLOR,
+            fg=BG_COLOR
+        )
         self.entertainment_card.pack(fill="both", expand=True)
         
-        # TV controls
+        # TV controls - using grid for even spacing
         tv_row = tk.Frame(self.entertainment_card.content_frame, bg=BG_COLOR)
-        tv_row.pack(fill="x", pady=2)
+        tv_row.pack(fill="x", pady=2, padx=10)
+        
+        # Configure 3 columns for even spacing
+        tv_row.grid_columnconfigure(0, weight=1, uniform="ent")
+        tv_row.grid_columnconfigure(1, weight=1, uniform="ent")
+        tv_row.grid_columnconfigure(2, weight=1, uniform="ent")
         
         tv_label = tk.Label(
             tv_row, text="TV",
             font=(FONT_FAMILY, 10),
             bg=BG_COLOR, fg=BORDER_COLOR,
-            anchor="w", width=15
+            anchor="w"
         )
-        tv_label.pack(side="left")
+        tv_label.grid(row=0, column=0, sticky="w")
+        
+        self.tv_status_label = tk.Label(
+            tv_row,
+            text="STATUS: OFF",
+            font=(FONT_FAMILY, 10),
+            bg=BG_COLOR, fg=INACTIVE_COLOR,
+            anchor="center"
+        )
+        self.tv_status_label.grid(row=0, column=1, sticky="ew")
         
         self.tv_switch = StatusSwitch(
             tv_row,
@@ -506,29 +650,33 @@ class ApexAssistantApp:
             initial_state=(self.simulator.get_device_state("tv").state in ["on", "playing"]),
             command=lambda: self._manual_toggle("tv")
         )
-        self.tv_switch.pack(side="right", padx=5)
+        self.tv_switch.grid(row=0, column=2, sticky="e")
         
-        # TV status
-        self.tv_status_label = tk.Label(
-            self.entertainment_card.content_frame,
-            text="Status: Off",
-            font=(FONT_FAMILY, 9),
-            bg=BG_COLOR, fg=INACTIVE_COLOR,
-            anchor="w"
-        )
-        self.tv_status_label.pack(anchor="w", padx=10)
-        
-        # Speaker controls
+        # Speaker controls - using grid for even spacing
         speaker_row = tk.Frame(self.entertainment_card.content_frame, bg=BG_COLOR)
-        speaker_row.pack(fill="x", pady=(10, 2))
+        speaker_row.pack(fill="x", pady=(10, 2), padx=10)
+        
+        # Configure 3 columns for even spacing
+        speaker_row.grid_columnconfigure(0, weight=1, uniform="ent2")
+        speaker_row.grid_columnconfigure(1, weight=1, uniform="ent2")
+        speaker_row.grid_columnconfigure(2, weight=1, uniform="ent2")
         
         speaker_label = tk.Label(
             speaker_row, text="Speaker",
             font=(FONT_FAMILY, 10),
             bg=BG_COLOR, fg=BORDER_COLOR,
-            anchor="w", width=15
+            anchor="w"
         )
-        speaker_label.pack(side="left")
+        speaker_label.grid(row=0, column=0, sticky="w")
+        
+        self.volume_label = tk.Label(
+            speaker_row,
+            text="VOLUME: 50%",
+            font=(FONT_FAMILY, 10),
+            bg=BG_COLOR, fg=INACTIVE_COLOR,
+            anchor="center"
+        )
+        self.volume_label.grid(row=0, column=1, sticky="ew")
         
         self.speaker_switch = StatusSwitch(
             speaker_row,
@@ -536,17 +684,7 @@ class ApexAssistantApp:
             initial_state=(self.simulator.get_device_state("speaker").state == "on"),
             command=lambda: self._manual_toggle("speaker")
         )
-        self.speaker_switch.pack(side="right", padx=5)
-        
-        # Volume display
-        self.volume_label = tk.Label(
-            self.entertainment_card.content_frame,
-            text="Volume: 50%",
-            font=(FONT_FAMILY, 9),
-            bg=BG_COLOR, fg=INACTIVE_COLOR,
-            anchor="w"
-        )
-        self.volume_label.pack(anchor="w", padx=10)
+        self.speaker_switch.grid(row=0, column=2, sticky="e")
     
     # ══════════════════════════════════════════════════════════════════
     #  GUI UPDATE METHODS
@@ -589,18 +727,18 @@ class ApexAssistantApp:
         tv_state = self.simulator.get_device_state("tv")
         if tv_state.state == "off":
             self.tv_switch.set_state(False)
-            self.tv_status_label.config(text="Status: OFF")
+            self.tv_status_label.config(text="STATUS: OFF")
         elif tv_state.playback_status == "playing":
             self.tv_switch.set_state(True)
-            self.tv_status_label.config(text="Status: PLAYING")
+            self.tv_status_label.config(text="STATUS: PLAYING")
         else:
             self.tv_switch.set_state(True)
-            self.tv_status_label.config(text="Status: PAUSED")
+            self.tv_status_label.config(text="STATUS: PAUSED")
         
         # Speaker
         speaker_state = self.simulator.get_device_state("speaker")
         self.speaker_switch.set_state(speaker_state.state == "on")
-        self.volume_label.config(text=f"Volume: {speaker_state.value}%")
+        self.volume_label.config(text=f"VOLUME: {speaker_state.value}%")
         
         # Thermostat
         thermostat_state = self.simulator.get_device_state("thermostat")
