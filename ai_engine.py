@@ -171,6 +171,28 @@ OUTPUT FORMAT (JSON ONLY, no markdown):
     - Use set_temp when user gives specific number
     - Use increase_temp/decrease_temp when user says "warmer" or "cooler" without number
 
+12. "EXCEPT" HANDLING:
+    - "turn on all lights except kitchen" = Turn on living_room and bedroom ONLY. Do NOT turn on kitchen.
+    - "turn off all lights except living room" = Turn off kitchen and bedroom ONLY. Do NOT turn off living room.
+    - "lock all doors except back door" = Lock front_door ONLY. Do NOT lock back_door.
+    - The excluded device should NOT appear in actions list.
+    - Double-check: if user says "except X", make sure X is NOT in your actions.
+
+13. VOLUME COMMANDS:
+    - "volume down to 50%" = set_volume to 50 (NOT decrease by 50)
+    - "volume up to 80%" = set_volume to 80 (NOT increase by 80)
+    - "volume down" (no number) = decrease_volume by 10
+    - "volume up" (no number) = increase_volume by 10
+    - "decrease volume by 20" = decrease_volume by 20
+    - "increase volume by 20" = increase_volume by 20
+
+14. TEMPERATURE COMMANDS:
+    - "set temperature to 22" = set_temp to 22
+    - "increase temperature by 5" = increase_temp by 5 (add 5 to current)
+    - "decrease temperature by 5" = decrease_temp by 5 (subtract 5 from current)
+    - "increase temperature to 36" = set_temp to 36 (but simulator will reject if out of range)
+    - Temperature range: 10-35°C
+
 
 EXAMPLES:
 
@@ -193,7 +215,7 @@ User: "Increase temperature to 36 degrees"
 Output: {"actions": [{"action": "set_temp", "target": "thermostat", "value": 35}], "spoken_feedback": "I've set the temperature to 35 degrees, which is the maximum."}
 
 User: "I'm going to sleep"
-Output: {"actions": [{"action": "turn_off", "target": "living_room_light", "value": null}, {"action": "turn_off", "target": "kitchen_light", "value": null}, {"action": "turn_off", "target": "bedroom_light", "value": null}, {"action": "lock", "target": "front_door", "value": null}, {"action": "lock", "target": "back_door", "value": null}, {"action": "turn_off", "target": "tv", "value": null}], "spoken_feedback": "All lights off, doors locked, and TV turned off. Goodnight!"}"""
+Output: {"actions": [{"action": "turn_off", "target": "living_room_light", "value": null}, {"action": "turn_off", "target": "kitchen_light", "value": null}, {"action": "turn_off", "target": "bedroom_light", "value": null}, {"action": "lock", "target": "front_door", "value": null}, {"action": "lock", "target": "back_door", "value": null}, {"action": "turn_off", "target": "tv", "value": null}, {"action": "turn_off", "target": "speaker", "value": null}], "spoken_feedback": "All lights off, doors locked, TV, and speaker turned off. Goodnight!"}"""
 
     def __init__(self):
         """Initialize the AI engine and verify Ollama connectivity."""

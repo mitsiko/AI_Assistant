@@ -35,8 +35,10 @@ logger = logging.getLogger("ApexLogger")
 class DeviceState:
     """Represents the current state of a single device."""
     name: str
-    state: str  # "on", "off", "locked", "unlocked", "playing", "paused", "stopped"
-    value: Optional[int] = None  # temperature, volume, etc.
+    state: str
+    value: Optional[int] = None
+    last_message: str = ""
+    was_adjusted: bool = False
 
 
 class HomeSimulator:
@@ -150,6 +152,8 @@ class HomeSimulator:
         old_value = device.value
         
         try:
+            # Reset was_adjusted for this new command
+            device.was_adjusted = False
             if action == "turn_on":
                 device.state = "on"
             elif action == "turn_off":
@@ -158,39 +162,130 @@ class HomeSimulator:
                 device.state = "locked"
             elif action == "unlock":
                 device.state = "unlocked"
+                
             elif action == "set_temp":
-                if value is None or not (10 <= value <= 35):
+                if value is None:
                     return {
                         "success": False,
-                        "message": f"Temperature must be between 10-35°C",
+                        "message": "Temperature value is missing.",
                         "device": None
                     }
-                device.value = value
+                
+                actual_value = max(10, min(35, value))
+                was_clamped = actual_value != value
+                
+                device.value = actual_value
                 device.state = "on"
+                device.was_adjusted = was_clamped
+                
+                if was_clamped:
+                    if actual_value == 35:
+                        device.last_message = f"Thermostat set to 35°C, which is the maximum."
+                    elif actual_value == 10:
+                        device.last_message = f"Thermostat set to 10°C, which is the lowest possible temperature."
+                else:
+                    device.last_message = f"Thermostat set to {actual_value}°C."
+                    
             elif action == "increase_temp":
                 increment = value if value else 2
-                new_temp = (device.value or 22) + increment
-                if new_temp > 35:
-                    new_temp = 35
-                device.value = new_temp
+                current_temp = device.value if device.value is not None else 22
+                new_temp = current_temp + increment
+                
+                actual_value = min(35, new_temp)
+                was_clamped = actual_value != new_temp
+                
+                device.value = actual_value
                 device.state = "on"
+                device.was_adjusted = was_clamped
+                
+                if was_clamped:
+                    device.last_message = f"Thermostat set to 35°C, which is the maximum."
+                else:
+                    device.last_message = f"Thermostat increased to {actual_value}°C."
+                    
             elif action == "decrease_temp":
                 decrement = value if value else 2
-                new_temp = (device.value or 22) - decrement
-                if new_temp < 10:
-                    new_temp = 10
-                device.value = new_temp
+                current_temp = device.value if device.value is not None else 22
+                new_temp = current_temp - decrement
+                
+                actual_value = max(10, new_temp)
+                was_clamped = actual_value != new_temp
+                
+                device.value = actual_value
                 device.state = "on"
+                device.was_adjusted = was_clamped
+                
+                if was_clamped:
+                    device.last_message = f"Thermostat set to 10°C, which is the lowest possible temperature."
+                else:
+                    device.last_message = f"Thermostat decreased to {actual_value}°C."
+                    
+            elif action == "set_volume":
+                if value is None:
+                    return {
+                        "success": False,
+                        "message": "Volume value is missing.",
+                        "device": None
+                    }
+                
+                actual_value = max(0, min(100, value))
+                was_clamped = actual_value != value
+                
+                device.value = actual_value
+                device.was_adjusted = was_clamped
+                if actual_value > 0:
+                    device.state = "on"
+                else:
+                    device.state = "off"
+                
+                if was_clamped:
+                    if actual_value == 100:
+                        device.last_message = f"Speaker volume set to 100%, which is the maximum."
+                    elif actual_value == 0:
+                        device.last_message = f"Speaker volume set to 0%, which is the lowest possible volume."
+                else:
+                    device.last_message = f"Speaker volume set to {actual_value}%."
+                    
             elif action == "increase_volume":
-                # Increase by 10% or specified amount
                 increment = value if value else 10
-                new_volume = min(100, (device.value or 50) + increment)
-                device.value = new_volume
+                current_volume = device.value if device.value is not None else 50
+                new_volume = current_volume + increment
+                
+                actual_value = min(100, new_volume)
+                was_clamped = actual_value != new_volume
+                
+                device.value = actual_value
+                device.was_adjusted = was_clamped
+                if actual_value > 0:
+                    device.state = "on"
+                else:
+                    device.state = "off"
+                
+                if was_clamped:
+                    device.last_message = f"Speaker volume set to 100%, which is the maximum."
+                else:
+                    device.last_message = f"Speaker volume increased to {actual_value}%."
+                    
             elif action == "decrease_volume":
-                # Decrease by 10% or specified amount
                 decrement = value if value else 10
-                new_volume = max(0, (device.value or 50) - decrement)
-                device.value = new_volume
+                current_volume = device.value if device.value is not None else 50
+                new_volume = current_volume - decrement
+                
+                actual_value = max(0, new_volume)
+                was_clamped = actual_value != new_volume
+                
+                device.value = actual_value
+                device.was_adjusted = was_clamped
+                if actual_value > 0:
+                    device.state = "on"
+                else:
+                    device.state = "off"
+                
+                if was_clamped:
+                    device.last_message = f"Speaker volume set to 0%, which is the lowest possible volume."
+                else:
+                    device.last_message = f"Speaker volume decreased to {actual_value}%."
+
             elif action == "play":
                 device.state = "playing"
                 if device.name == "TV":
@@ -201,7 +296,14 @@ class HomeSimulator:
                 device.state = "stopped"
             
             # ── Log State Change ───────────────────────────────────
-            change_description = self._describe_change(action, target, old_state, device.state, old_value, device.value)
+            # Use last_message if available, otherwise use default description
+            if hasattr(device, 'last_message') and device.last_message:
+                change_description = device.last_message
+                # Clear last_message for next time
+                device.last_message = ""
+            else:
+                change_description = self._describe_change(action, target, old_state, device.state, old_value, device.value)
+            
             self.last_actions.append({
                 "action": action,
                 "target": target,
@@ -218,9 +320,11 @@ class HomeSimulator:
             return {
                 "success": True,
                 "message": change_description,
-                "device": asdict(device)
+                "device": asdict(device),
+                "was_adjusted": getattr(device, 'was_adjusted', False),
+                "actual_value": device.value
             }
-            
+        
         except Exception as e:
             logger.error(f"Error applying command: {e}")
             return {
@@ -276,6 +380,8 @@ class HomeSimulator:
             return f"{device.name} increased to {new_value}°C"
         elif action == "decrease_temp":
             return f"{device.name} decreased to {new_value}°C"
+        elif action == "set_volume":
+            return f"{device.name} volume set to {new_value}%"
         elif action == "increase_volume":
             return f"{device.name} volume increased to {new_value}%"
         elif action == "decrease_volume":

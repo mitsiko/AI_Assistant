@@ -647,23 +647,55 @@ class ApexAssistantApp:
                     return
                 
                 elif valid_actions:
-                    # Execute valid commands
+                    # Execute valid commands ONCE
                     self._update_status("Executing...")
                     logger.info(f"Executing {len(valid_actions)} action(s).")
                     
                     understood_parts = []
+                    failed_parts = []
+                    execution_results = []
+                    any_adjusted = False
+                    
+                    # Execute each action exactly ONCE
                     for action in valid_actions:
                         result = self.simulator.apply_command(
                             action=action.action,
                             target=action.target,
                             value=action.value
                         )
+                        execution_results.append(result)
+                        
                         if result["success"]:
                             understood_parts.append(result["message"])
+                            if result.get("was_adjusted", False):
+                                any_adjusted = True
                         else:
-                            understood_parts.append(f"Failed: {result['message']}")
+                            failed_parts.append(result["message"])
                     
-                    understood = "; ".join(understood_parts)
+                    # Generate spoken feedback based on execution results
+                    if any_adjusted:
+                        # At least one action was clamped - use simulator's corrected message
+                        adjusted_messages = [r["message"] for r in execution_results if r.get("was_adjusted", False)]
+                        non_adjusted_messages = [r["message"] for r in execution_results if r["success"] and not r.get("was_adjusted", False)]
+                        
+                        # Combine adjusted and non-adjusted messages naturally
+                        if adjusted_messages and non_adjusted_messages:
+                            response.spoken_feedback = " ".join(non_adjusted_messages) + " Also, " + " ".join(adjusted_messages)
+                        elif adjusted_messages:
+                            response.spoken_feedback = " ".join(adjusted_messages)
+                    elif failed_parts and not understood_parts:
+                        # All actions failed
+                        response.spoken_feedback = " ".join(failed_parts)
+                    # If no adjustments and no total failure, keep AI's original spoken_feedback
+                    
+                    # Build understood text for GUI
+                    if understood_parts and failed_parts:
+                        understood = "; ".join(understood_parts) + " | Failed: " + "; ".join(failed_parts)
+                    elif understood_parts:
+                        understood = "; ".join(understood_parts)
+                    else:
+                        understood = "Failed: " + "; ".join(failed_parts)
+                    
                     logger.info(f"Actions completed: {understood}")
                     
                     # Update GUI
