@@ -39,6 +39,8 @@ class DeviceState:
     value: Optional[int] = None
     last_message: str = ""
     was_adjusted: bool = False
+    ac_mode: str = "NORMAL"  # NORMAL, COOL, FAN, DRY, OFF
+    playback_status: str = "paused"  # playing, paused (for TV)
 
 
 class HomeSimulator:
@@ -57,7 +59,7 @@ class HomeSimulator:
     # ── Valid Actions per Device Category ──────────────────────────
     LIGHT_ACTIONS = ["turn_on", "turn_off"]
     DOOR_ACTIONS = ["lock", "unlock"]
-    THERMOSTAT_ACTIONS = ["set_temp", "increase_temp", "decrease_temp"]
+    THERMOSTAT_ACTIONS = ["set_temp", "increase_temp", "decrease_temp", "set_ac_mode"]
     ENTERTAINMENT_ACTIONS = ["turn_on", "turn_off", "play", "pause", "stop", "set_volume", "increase_volume", "decrease_volume"]
     
     def __init__(self):
@@ -76,9 +78,10 @@ class HomeSimulator:
         self.devices["thermostat"] = DeviceState(
             name="Thermostat",
             state="on",
-            value=22  # Default temperature in Celsius
+            value=22,
+            ac_mode="NORMAL"
         )
-        
+
         # ── Initialize Doors ───────────────────────────────────────
         for door in self.DOOR_DEVICES:
             self.devices[door] = DeviceState(
@@ -90,7 +93,8 @@ class HomeSimulator:
         self.devices["tv"] = DeviceState(
             name="TV",
             state="off",
-            value=None
+            value=None,
+            playback_status="paused"
         )
         self.devices["speaker"] = DeviceState(
             name="Speaker",
@@ -156,8 +160,13 @@ class HomeSimulator:
             device.was_adjusted = False
             if action == "turn_on":
                 device.state = "on"
+                if device.name == "TV":
+                    # TV turns on but remains paused until play command
+                    device.playback_status = "paused"
             elif action == "turn_off":
                 device.state = "off"
+                if device.name == "TV":
+                    device.playback_status = "paused"
             elif action == "lock":
                 device.state = "locked"
             elif action == "unlock":
@@ -198,6 +207,10 @@ class HomeSimulator:
                 device.state = "on"
                 device.was_adjusted = was_clamped
                 
+                # Keep current AC mode unless it's OFF
+                if device.ac_mode == "OFF":
+                    device.ac_mode = "NORMAL"
+                
                 if was_clamped:
                     device.last_message = f"Thermostat set to 35°C, which is the maximum."
                 else:
@@ -215,10 +228,53 @@ class HomeSimulator:
                 device.state = "on"
                 device.was_adjusted = was_clamped
                 
+                # Keep current AC mode unless it's OFF
+                if device.ac_mode == "OFF":
+                    device.ac_mode = "NORMAL"
+                
                 if was_clamped:
                     device.last_message = f"Thermostat set to 10°C, which is the lowest possible temperature."
                 else:
                     device.last_message = f"Thermostat decreased to {actual_value}°C."
+           
+            elif action == "set_ac_mode":
+                valid_modes = ["NORMAL", "COOL", "FAN", "DRY", "OFF"]
+                
+                # Handle string or None value
+                if value is None:
+                    return {
+                        "success": False,
+                        "message": "AC mode is required.",
+                        "device": None
+                    }
+                
+                mode = str(value).upper()
+                if mode not in valid_modes:
+                    return {
+                        "success": False,
+                        "message": f"Invalid AC mode: {value}. Must be one of {valid_modes}",
+                        "device": None
+                    }
+                
+                device.ac_mode = mode
+                device.was_adjusted = False
+                
+                if mode == "OFF":
+                    device.state = "off"
+                    device.value = None  # Temperature unavailable
+                    device.last_message = "Air conditioner turned off."
+                else:
+                    device.state = "on"
+                    if mode == "NORMAL":
+                        if old_value is None or old_state == "off":
+                            device.value = 22
+                        device.last_message = f"Air conditioner set to normal mode at {device.value}°C."
+                    elif mode == "COOL":
+                        device.last_message = "Air conditioner set to cool mode."
+                    elif mode == "FAN":
+                        device.last_message = "Air conditioner set to fan mode."
+                    elif mode == "DRY":
+                        device.last_message = "Air conditioner set to dry mode."
                     
             elif action == "set_volume":
                 if value is None:
@@ -287,13 +343,25 @@ class HomeSimulator:
                     device.last_message = f"Speaker volume decreased to {actual_value}%."
 
             elif action == "play":
-                device.state = "playing"
                 if device.name == "TV":
+                    if device.state == "off":
+                        device.state = "on"  # Auto power on
+                    device.playback_status = "playing"
+                    device.last_message = "TV is now playing."
+                else:
                     device.state = "playing"
             elif action == "pause":
-                device.state = "paused"
+                if device.name == "TV":
+                    device.playback_status = "paused"
+                    device.last_message = "TV paused."
+                else:
+                    device.state = "paused"
             elif action == "stop":
-                device.state = "stopped"
+                if device.name == "TV":
+                    device.playback_status = "paused"  # Same as pause per requirements
+                    device.last_message = "TV paused."
+                else:
+                    device.state = "stopped"
             
             # ── Log State Change ───────────────────────────────────
             # Use last_message if available, otherwise use default description
@@ -380,6 +448,12 @@ class HomeSimulator:
             return f"{device.name} increased to {new_value}°C"
         elif action == "decrease_temp":
             return f"{device.name} decreased to {new_value}°C"
+        elif action == "set_ac_mode":
+            return f"Thermostat AC mode set to {device.ac_mode}"
+        elif action == "play" and target == "tv":
+            return f"TV is now playing"
+        elif action == "pause" and target == "tv":
+            return f"TV paused"
         elif action == "set_volume":
             return f"{device.name} volume set to {new_value}%"
         elif action == "increase_volume":

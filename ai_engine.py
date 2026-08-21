@@ -29,7 +29,7 @@ import time
 from typing import List, Optional, Dict, Any
 
 import ollama
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 logger = logging.getLogger("ApexLogger")
 
@@ -43,26 +43,52 @@ class SmartHomeAction(BaseModel):
     """
     action: str = Field(
         ...,
-        description=(
-            "The operation to perform. Must be one of: "
-            "turn_on, turn_off, set_temp, increase_temp, decrease_temp, "
-            "lock, unlock, set_volume, play, pause, stop."
-        )
+        description="The operation to perform."
     )
     target: str = Field(
         ...,
-        description=(
-            "The device identifier. Must be one of: "
-            "living_room_light, kitchen_light, bedroom_light, "
-            "thermostat, front_door, back_door, "
-            "tv, speaker, entertainment_unit."
-        )
+        description="The device identifier."
     )
-    value: Optional[int] = Field(
+    value: Optional[int | str] = Field(
         default=None,
-        description="Numeric value for temperature or volume. Null for toggles."
+        description="Numeric value for temperature/volume, or string for AC mode."
     )
-
+    
+    @field_validator('value')
+    @classmethod
+    def validate_value_by_action(cls, v, info):
+        """Validate value based on action type."""
+        action = info.data.get('action', '')
+        
+        # String values for AC mode
+        if action == 'set_ac_mode':
+            valid_modes = ['NORMAL', 'COOL', 'FAN', 'DRY', 'OFF']
+            if isinstance(v, str) and v.upper() in valid_modes:
+                return v.upper()
+            elif v is None:
+                raise ValueError("AC mode is required")
+            else:
+                raise ValueError(f"Invalid AC mode: {v}. Must be one of {valid_modes}")
+        
+        # Integer values for numeric actions
+        numeric_actions = ['set_temp', 'increase_temp', 'decrease_temp', 
+                          'set_volume', 'increase_volume', 'decrease_volume']
+        if action in numeric_actions:
+            if isinstance(v, int):
+                return v
+            elif isinstance(v, str) and v.isdigit():
+                return int(v)
+            elif v is None:
+                return None
+            else:
+                raise ValueError(f"Value must be an integer for action '{action}'")
+        
+        # No value for toggle actions
+        toggle_actions = ['turn_on', 'turn_off', 'lock', 'unlock', 'play', 'pause', 'stop']
+        if action in toggle_actions:
+            return None
+        
+        return v
 class SmartHomeResponse(BaseModel):
     """
     Top-level response schema returned by the AI engine.
@@ -92,7 +118,7 @@ class AIEngine:
     MAX_RETRIES = 2
     INFERENCE_TIMEOUT = 10.0
     
-    SYSTEM_PROMPT = """You are Sophia, a smart home assistant. Parse user commands into structured JSON ONLY.
+    SYSTEM_PROMPT = """You are Nova, a smart home assistant. Parse user commands into structured JSON ONLY.
 
 CRITICAL RULES - READ CAREFULLY:
 
@@ -123,7 +149,7 @@ CRITICAL RULES - READ CAREFULLY:
 
 6. VALID ACTIONS (use EXACTLY these):
    - Lights: turn_on, turn_off
-   - Thermostat: set_temp, increase_temp, decrease_temp
+   - Thermostat: set_temp, increase_temp, decrease_temp, set_ac_mode
    - Doors: lock, unlock
    - TV/Speaker: turn_on, turn_off, play, pause, stop, set_volume, increase_volume, decrease_volume
 
@@ -193,14 +219,56 @@ OUTPUT FORMAT (JSON ONLY, no markdown):
     - "increase temperature to 36" = set_temp to 36 (but simulator will reject if out of range)
     - Temperature range: 10-35°C
 
+15. AC MODE RULES - CRITICAL FOR COMBINED INTENTS:
+    - set_ac_mode values: "NORMAL", "COOL", "FAN", "DRY", "OFF"
+    
+    ENVIRONMENTAL COMFORT RULES:
+    - "hot", "warm", "too warm" → MUST generate BOTH:
+        1. decrease_temp +2
+        2. set_ac_mode "COOL"
+    - "cold", "freezing", "chilly" → MUST generate BOTH:
+        1. increase_temp +2
+        2. set_ac_mode "FAN"
+    - "humid", "sticky", "damp" (humidity only) → set_ac_mode "DRY" (NO temperature change)
+    - "hot and humid", "warm and sticky" → MUST generate BOTH:
+        1. decrease_temp +2
+        2. set_ac_mode "DRY"
+    
+    MILD QUALIFIERS:
+    - "a bit cold", "kind of warm", "slightly hot" → temperature change ONLY, NO mode change
+    - The mode should remain "NORMAL" (don't add set_ac_mode action)
+    
+    EXPLICIT AC COMMANDS:
+    - "turn off AC", "AC off" → set_ac_mode "OFF"
+    - "turn on AC" → set_ac_mode "NORMAL"
+    - "set AC to COOL" → set_ac_mode "COOL" (no temperature change)
+
+16. TV PLAYBACK RULES - CRITICAL DISTINCTIONS:
+    - "play TV", "watch TV", "start TV" → action: "play", target: "tv"
+    - "pause TV", "pause" → action: "pause", target: "tv"
+    - "stop TV", "stop playing" → action: "stop", target: "tv" (results in PAUSED)
+    - "turn on TV" → action: "turn_on", target: "tv" (TV ON but PAUSED)
+    - "turn off TV" → action: "turn_off", target: "tv"
+    
+    IMPORTANT DISTINCTIONS:
+    - "play" is NOT the same as "turn_on"
+    - "pause" is NOT the same as "turn_off"
+    - "stop" for TV means PAUSED, not OFF
+    - Do NOT interpret "pause" or "stop" as "turn_on"
 
 EXAMPLES:
 
 User: "It's hot in here"
-Output: {"actions": [{"action": "decrease_temp", "target": "thermostat", "value": 2}], "spoken_feedback": "I've decreased the temperature by 2 degrees."}
+Output: {"actions": [{"action": "decrease_temp", "target": "thermostat", "value": 2}, {"action": "set_ac_mode", "target": "thermostat", "value": "COOL"}], "spoken_feedback": "I've decreased the temperature by 2 degrees and set the AC to cool mode."}
+
+User: "It's hot and humid here"
+Output: {"actions": [{"action": "decrease_temp", "target": "thermostat", "value": 2}, {"action": "set_ac_mode", "target": "thermostat", "value": "DRY"}], "spoken_feedback": "I've decreased the temperature by 2 degrees and switched the AC to dry mode."}
 
 User: "It's cold in here"
-Output: {"actions": [{"action": "increase_temp", "target": "thermostat", "value": 2}], "spoken_feedback": "I've increased the temperature by 2 degrees."}
+Output: {"actions": [{"action": "increase_temp", "target": "thermostat", "value": 2}, {"action": "set_ac_mode", "target": "thermostat", "value": "FAN"}], "spoken_feedback": "I've increased the temperature by 2 degrees and switched the AC to fan mode."}
+
+User: "It's humid in here"
+Output: {"actions": [{"action": "set_ac_mode", "target": "thermostat", "value": "DRY"}], "spoken_feedback": "I've switched the AC to dry mode to reduce humidity."}
 
 User: "Turn the volume up"
 Output: {"actions": [{"action": "increase_volume", "target": "speaker", "value": 10}], "spoken_feedback": "Volume increased by 10%."}
@@ -215,7 +283,19 @@ User: "Increase temperature to 36 degrees"
 Output: {"actions": [{"action": "set_temp", "target": "thermostat", "value": 35}], "spoken_feedback": "I've set the temperature to 35 degrees, which is the maximum."}
 
 User: "I'm going to sleep"
-Output: {"actions": [{"action": "turn_off", "target": "living_room_light", "value": null}, {"action": "turn_off", "target": "kitchen_light", "value": null}, {"action": "turn_off", "target": "bedroom_light", "value": null}, {"action": "lock", "target": "front_door", "value": null}, {"action": "lock", "target": "back_door", "value": null}, {"action": "turn_off", "target": "tv", "value": null}, {"action": "turn_off", "target": "speaker", "value": null}], "spoken_feedback": "All lights off, doors locked, TV, and speaker turned off. Goodnight!"}"""
+Output: {"actions": [{"action": "turn_off", "target": "living_room_light", "value": null}, {"action": "turn_off", "target": "kitchen_light", "value": null}, {"action": "turn_off", "target": "bedroom_light", "value": null}, {"action": "lock", "target": "front_door", "value": null}, {"action": "lock", "target": "back_door", "value": null}, {"action": "turn_off", "target": "tv", "value": null}, {"action": "turn_off", "target": "speaker", "value": null}], "spoken_feedback": "All lights off, doors locked, TV, and speaker turned off. Goodnight!"}
+
+User: "Play the TV"
+Output: {"actions": [{"action": "play", "target": "tv", "value": null}], "spoken_feedback": "TV is now playing."}
+
+User: "Pause the TV"
+Output: {"actions": [{"action": "pause", "target": "tv", "value": null}], "spoken_feedback": "TV paused."}
+
+User: "Turn off the TV"
+Output: {"actions": [{"action": "turn_off", "target": "tv", "value": null}], "spoken_feedback": "TV turned off."}
+"""
+
+
 
     def __init__(self):
         """Initialize the AI engine and verify Ollama connectivity."""
@@ -370,13 +450,18 @@ Output: {"actions": [{"action": "turn_off", "target": "living_room_light", "valu
         text_lower = text.lower().strip()
         
         # Remove wake word if present
-        text_lower = re.sub(r"^(hey|ok|okay)?\s*sophia[,\s]*", "", text_lower)
+        text_lower = re.sub(r"^(hey|ok|okay)?\s*nova[,\s]*", "", text_lower)
 
         # Handle "open/close" for lights and doors (common speech pattern)
         text_lower = re.sub(r'\bopen\s+(the\s+)?(.*?)\s+lights?\b', r'turn on \2light', text_lower)
         text_lower = re.sub(r'\bclose\s+(the\s+)?(.*?)\s+lights?\b', r'turn off \2light', text_lower)
         text_lower = re.sub(r'\bopen\s+(the\s+)?door\b', r'unlock door', text_lower)
         text_lower = re.sub(r'\bclose\s+(the\s+)?door\b', r'lock door', text_lower)
+        
+        # ASR correction: "fun mode" → "fan mode" when in AC context
+        if re.search(r'\b(ac|air\s*con|aircon|thermostat)\b', text_lower):
+            text_lower = re.sub(r'\bfun\s+mode\b', 'fan mode', text_lower)
+            logger.info("ASR correction: 'fun mode' -> 'fan mode'")
         
         # Common STT corrections (word-boundary only)
         corrections = {

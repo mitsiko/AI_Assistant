@@ -8,7 +8,7 @@ Date: August 2026
 Description:
     Handles the full audio lifecycle for the Apex Home Assistant.
     - STT: Offline speech-to-text via Vosk + PyAudio streaming.
-    - Wake Word: Continuous listening for "hey sophia" trigger.
+    - Wake Word: Continuous listening for "hey nova" trigger.
     - Silence Detection: Auto-captures end-of-utterance.
     - TTS: Reliable offline spoken feedback via pyttsx3 with queue management.
 
@@ -47,7 +47,7 @@ class VoicePipeline:
     CHUNK_SIZE = 4000
     CHANNELS = 1
     SILENCE_LIMIT = 1.5  # Reduced from 2.0 for snappier response
-    WAKE_WORD = "hey sophia"
+    WAKE_WORD = "hey nova"
     
     def __init__(self, model_path: str = "models/vosk-model-small-en-us-0.15"):
         """

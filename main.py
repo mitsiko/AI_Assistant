@@ -14,7 +14,8 @@ Workflow:
     Voice → Speech-to-Text → AI Intent Processing → 
     Structured Command → Home Simulator → GUI Update → TTS
 """
-
+import os
+from PIL import Image, ImageTk 
 import json
 import logging
 import queue
@@ -65,10 +66,10 @@ logger = setup_logging()
 #  GUI COLORS & CONSTANTS
 # ══════════════════════════════════════════════════════════════════════
 
-BG_COLOR = "#f4eddb"
-BORDER_COLOR = "#000000"
+BG_COLOR = "#e8e7db"
+BORDER_COLOR = "#2d2a2a"
 ACTIVE_COLOR = "#eb3d1b"
-INACTIVE_COLOR = "#767062"
+INACTIVE_COLOR = "#afaf9e"
 FONT_FAMILY = "MS Gothic"  # Monospace
 
 # ══════════════════════════════════════════════════════════════════════
@@ -166,7 +167,7 @@ class ApexAssistantApp:
     
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Apex Home Assistant - Sophia")
+        self.root.title("Apex Home Assistant - Nova")
         self.root.geometry("800x600")
         self.root.configure(bg=BG_COLOR)
         self.root.minsize(600, 500)
@@ -254,7 +255,7 @@ class ApexAssistantApp:
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
         
-        # ── Top Row: Status, Activity, Thermostat ───────────────────
+        # ── Top Row: Status and Activity ───────────────────────────
         top_row = tk.Frame(self.scrollable_frame, bg=BG_COLOR)
         top_row.pack(fill="x", padx=10, pady=(10, 5))
         
@@ -262,7 +263,7 @@ class ApexAssistantApp:
         self.status_card = BentoCard(top_row, "ASSISTANT STATUS")
         self.status_card.pack(side="left", fill="both", expand=True, padx=(0, 5))
         
-        # Sophia icon (placeholder circle)
+        # Nova icon (placeholder circle)
         self.icon_canvas = tk.Canvas(
             self.status_card.content_frame,
             width=60, height=60,
@@ -275,7 +276,7 @@ class ApexAssistantApp:
         
         self.assistant_name = tk.Label(
             self.status_card.content_frame,
-            text="Sophia",
+            text="Nova",
             font=(FONT_FAMILY, 14, "bold"),
             bg=BG_COLOR, fg=BORDER_COLOR
         )
@@ -291,7 +292,7 @@ class ApexAssistantApp:
         
         self.instruction_label = tk.Label(
             self.status_card.content_frame,
-            text='Say "Hey Sophia"',
+            text='Say "Hey Nova"',
             font=(FONT_FAMILY, 9),
             bg=BG_COLOR, fg=INACTIVE_COLOR
         )
@@ -299,7 +300,7 @@ class ApexAssistantApp:
         
         # Latest Activity Card
         self.activity_card = BentoCard(top_row, "LATEST ACTIVITY")
-        self.activity_card.pack(side="left", fill="both", expand=True, padx=5)
+        self.activity_card.pack(side="left", fill="both", expand=True, padx=(5, 0))
         
         self.you_said_label = tk.Label(
             self.activity_card.content_frame,
@@ -319,34 +320,99 @@ class ApexAssistantApp:
         )
         self.understood_label.pack(anchor="w", pady=(0, 5))
         
-        self.sophia_label = tk.Label(
+        self.nova_label = tk.Label(
             self.activity_card.content_frame,
-            text='SOPHIA:\n"..."',
+            text='NOVA:\n"..."',
             font=(FONT_FAMILY, 9),
             bg=BG_COLOR, fg=BORDER_COLOR,
             justify="left", wraplength=200
         )
-        self.sophia_label.pack(anchor="w")
+        self.nova_label.pack(anchor="w")
+
+        # Load mode icons
+        self.mode_icons = {}
+        icon_files = {
+            "cool_active": "assets/cool_active.png",
+            "cool_inactive": "assets/cool_inactive.png",
+            "fan_active": "assets/fan_active.png",
+            "fan_inactive": "assets/fan_inactive.png",
+            "dry_active": "assets/dry_active.png",
+            "dry_inactive": "assets/dry_inactive.png",
+        }
         
-        # Thermostat Card
-        self.thermostat_card = BentoCard(top_row, "THERMOSTAT")
-        self.thermostat_card.pack(side="left", fill="both", expand=True, padx=(5, 0))
+        for key, path in icon_files.items():
+            if os.path.exists(path):
+                img = Image.open(path)
+                img = img.resize((100, 60), Image.Resampling.LANCZOS)
+                self.mode_icons[key] = ImageTk.PhotoImage(img)
+            else:
+                self.mode_icons[key] = None
         
+        # ── Second Row: Thermostat (Full Width) ────────────────────
+        thermostat_row = tk.Frame(self.scrollable_frame, bg=BG_COLOR)
+        thermostat_row.pack(fill="x", padx=10, pady=5)
+        
+        self.thermostat_card = BentoCard(thermostat_row, "THERMOSTAT")
+        self.thermostat_card.pack(fill="both", expand=True)
+        
+        # Temperature and mode display
+        thermo_content = tk.Frame(self.thermostat_card.content_frame, bg=BG_COLOR)
+        thermo_content.pack(fill="x", pady=10)
+        
+        # Temperature
         self.temp_display = tk.Label(
-            self.thermostat_card.content_frame,
+            thermo_content,
             text="22°C",
-            font=(FONT_FAMILY, 32, "bold"),
+            font=(FONT_FAMILY, 24, "bold"),
             bg=BG_COLOR, fg=ACTIVE_COLOR
         )
-        self.temp_display.pack(pady=(10, 0))
+        self.temp_display.pack(side="left", padx=20)
         
-        self.temp_label = tk.Label(
-            self.thermostat_card.content_frame,
-            text="Temperature",
-            font=(FONT_FAMILY, 10),
-            bg=BG_COLOR, fg=BORDER_COLOR
+        # Mode icons (placeholder buttons)
+        mode_frame = tk.Frame(thermo_content, bg=BG_COLOR)
+        mode_frame.pack(side="left", padx=20)
+        
+        # COOL mode
+        cool_frame = tk.Frame(mode_frame, bg=BG_COLOR)
+        cool_frame.pack(side="left", padx=10)
+        # COOL mode icon
+        self.cool_icon = tk.Label(
+            cool_frame,
+            image=self.mode_icons.get("cool_inactive") if self.mode_icons.get("cool_inactive") else None,
+            text="" if self.mode_icons.get("cool_inactive") else "❄",
+            font=(FONT_FAMILY, 20),
+            bg=BG_COLOR, fg=INACTIVE_COLOR
         )
-        self.temp_label.pack(pady=(0, 10))
+        self.cool_icon.pack()
+        tk.Label(cool_frame, text="Cool", font=(FONT_FAMILY, 9), bg=BG_COLOR, fg=BORDER_COLOR).pack()
+        
+        # FAN mode
+        fan_frame = tk.Frame(mode_frame, bg=BG_COLOR)
+        fan_frame.pack(side="left", padx=10)
+        # FAN mode icon
+        self.fan_icon = tk.Label(
+            fan_frame,
+            image=self.mode_icons.get("fan_inactive") if self.mode_icons.get("fan_inactive") else None,
+            text="" if self.mode_icons.get("fan_inactive") else "♨",
+            font=(FONT_FAMILY, 20),
+            bg=BG_COLOR, fg=INACTIVE_COLOR
+        )
+        self.fan_icon.pack()
+        tk.Label(fan_frame, text="Fan", font=(FONT_FAMILY, 9), bg=BG_COLOR, fg=BORDER_COLOR).pack()
+        
+        # DRY mode
+        dry_frame = tk.Frame(mode_frame, bg=BG_COLOR)
+        dry_frame.pack(side="left", padx=10)
+        # DRY mode icon
+        self.dry_icon = tk.Label(
+            dry_frame,
+            image=self.mode_icons.get("dry_inactive") if self.mode_icons.get("dry_inactive") else None,
+            text="" if self.mode_icons.get("dry_inactive") else "💧",
+            font=(FONT_FAMILY, 20),
+            bg=BG_COLOR, fg=INACTIVE_COLOR
+        )
+        self.dry_icon.pack()
+        tk.Label(dry_frame, text="Dry", font=(FONT_FAMILY, 9), bg=BG_COLOR, fg=BORDER_COLOR).pack()
         
         # ── Middle Row: Lights, Security ────────────────────────────
         middle_row = tk.Frame(self.scrollable_frame, bg=BG_COLOR)
@@ -495,7 +561,7 @@ class ApexAssistantApp:
         self.status_label.config(text=status)
         
         if status == "Ready":
-            self.instruction_label.config(text='Say "Hey Sophia"')
+            self.instruction_label.config(text='Say "Hey Nova"')
         else:
             self.instruction_label.config(text="")
         
@@ -505,7 +571,7 @@ class ApexAssistantApp:
         """Update latest activity card."""
         self.you_said_label.config(text=f'YOU SAID:\n"{command}"')
         self.understood_label.config(text=f"UNDERSTOOD:\n{understood}")
-        self.sophia_label.config(text=f'SOPHIA:\n"{response}"')
+        self.nova_label.config(text=f'Nova:\n"{response}"')
     
     def _update_all_devices(self):
         """Update all device switches based on simulator state."""
@@ -521,8 +587,15 @@ class ApexAssistantApp:
         
         # TV
         tv_state = self.simulator.get_device_state("tv")
-        self.tv_switch.set_state(tv_state.state in ["on", "playing"])
-        self.tv_status_label.config(text=f"Status: {tv_state.state.title()}")
+        if tv_state.state == "off":
+            self.tv_switch.set_state(False)
+            self.tv_status_label.config(text="Status: OFF")
+        elif tv_state.playback_status == "playing":
+            self.tv_switch.set_state(True)
+            self.tv_status_label.config(text="Status: PLAYING")
+        else:
+            self.tv_switch.set_state(True)
+            self.tv_status_label.config(text="Status: PAUSED")
         
         # Speaker
         speaker_state = self.simulator.get_device_state("speaker")
@@ -531,7 +604,16 @@ class ApexAssistantApp:
         
         # Thermostat
         thermostat_state = self.simulator.get_device_state("thermostat")
-        self.temp_display.config(text=f"{thermostat_state.value}°C")
+        if thermostat_state.ac_mode == "OFF" or thermostat_state.state == "off":
+            self.temp_display.config(text="--")
+        else:
+            self.temp_display.config(text=f"{thermostat_state.value}°C")
+        
+        # Update AC mode icons
+        mode = thermostat_state.ac_mode
+        self.cool_icon.config(fg=ACTIVE_COLOR if mode == "COOL" else INACTIVE_COLOR)
+        self.fan_icon.config(fg=ACTIVE_COLOR if mode == "FAN" else INACTIVE_COLOR)
+        self.dry_icon.config(fg=ACTIVE_COLOR if mode == "DRY" else INACTIVE_COLOR)
     
     def _manual_toggle(self, device_id: str):
         """Handle manual switch clicks for testing."""
